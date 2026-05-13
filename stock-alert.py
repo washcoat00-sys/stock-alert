@@ -14,7 +14,7 @@ SIGMA_MULT = 1.0  # 1시그마 기준
 
 def send_telegram_msg(message):
     if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("에러: 텔레그램 토큰 또는 채팅 ID 설정이 필요합니다.")
+        print("에러: 텔레그램 토큰 또는 채팅 ID가 없습니다.")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'HTML'}
@@ -24,8 +24,15 @@ def send_telegram_msg(message):
         print(f"전송 실패: {e}")
 
 def analyze_stocks():
+    # 1. CSV 파일 안전하게 읽기 (공백 제거 및 소문자 변환 방어코드)
     try:
-        df_targets = pd.read_csv(CSV_FILE, dtype={'code': str})
+        df_targets = pd.read_csv(CSV_FILE, dtype=str)
+        df_targets.columns = df_targets.columns.str.strip().str.lower()
+        
+        if 'code' not in df_targets.columns:
+            send_telegram_msg("⚠️ 시스템 에러: CSV 파일 맨 윗줄에 'code'를 찾을 수 없습니다.")
+            return
+            
     except FileNotFoundError:
         print(f"에러: {CSV_FILE} 파일을 찾을 수 없습니다.")
         return
@@ -34,24 +41,35 @@ def analyze_stocks():
     report_lines = [f"📊 <b>주식 상태 리포트 ({now_str})</b>"]
     report_lines.append(f"<i>기준: 일일 변동률 {SIGMA_MULT}시그마</i>\n")
 
+    # 2. 개별 종목 분석 시작
     for index, row in df_targets.iterrows():
-        code = str(row['code'])
-        # CSV에 'name' 열이 있으면 종목명을 가져옵니다.
-        stock_name = row['name'] if 'name' in df_targets.columns else code
+        # 데이터 안전하게 가져오기 (공백 제거)
+        code = str(row['code']).strip()
         
+        # name 열이 있고 값이 비어있지 않으면 가져옴
+        if 'name' in df_targets.columns and pd.notna(row['name']):
+            stock_name = str(row['name']).strip()
+        else:
+            stock_name = code
+            
         ticker = code if '.' in code else f"{code}.KS"
         display_name = f"<b>{stock_name}</b>({code})" if stock_name != code else f"<b>{ticker}</b>"
+
+        print(f"[{index+1}/{len(df_targets)}] {display_name} 분석 중...") # 깃허브 로그용
 
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(period="3y")
             
+            # 에러 방지 1: 데이터가 비어있거나 'Close(종가)' 데이터가 없는 경우 건너뛰기
+            if df is None or df.empty or 'Close' not in df.columns or len(df) < 50:
+                report_lines.append(f"⚠️ {display_name}: 데이터 부족 (신규상장/거래정지)")
+                continue
+
+            # 에러 방지 2: 정상적인 데이터일 때만 계산 수행
             df['Daily_Return'] = df['Close'].pct_change() * 100
             df = df.dropna(subset=['Daily_Return'])
             
-            if df.empty or len(df) < 50:
-                continue
-
             data_len = len(df)
             current_window = next((w for w in AVAILABLE_WINDOWS if data_len >= w), 50)
 
@@ -75,13 +93,15 @@ def analyze_stocks():
             else:
                 status = "⚫ 관망중"
 
-            # 텔레그램 출력 포맷 (2줄 출력)
             line = f"{status} | {display_name} | {int(curr_price):,}원\n└ 1σ범위: {lower_bound:+.2f}% ~ {upper_bound:+.2f}% / 오늘: {curr_return:+.2f}%"
             report_lines.append(line)
             
         except Exception as e:
-            report_lines.append(f"⚠️ {display_name}: 분석 오류")
+            # 어떤 에러가 나도 프로그램이 뻗지 않고 다음 종목으로 넘어가도록 처리
+            print(f"에러 발생 ({ticker}): {e}")
+            report_lines.append(f"⚠️ {display_name}: 일시적 통신 오류")
 
+    # 3. 결과 텔레그램 전송
     full_report = "\n".join(report_lines)
     send_telegram_msg(full_report)
     print("텔레그램 리포트 전송 완료!")
