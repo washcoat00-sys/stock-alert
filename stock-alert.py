@@ -24,9 +24,15 @@ def send_telegram_msg(message):
         print(f"전송 실패: {e}")
 
 def analyze_stocks():
-    # 1. CSV 파일 안전하게 읽기 (공백 제거 및 소문자 변환 방어코드)
+    # 1. CSV 파일 안전하게 읽기 (🔥 인코딩 에러 해결 부분 🔥)
     try:
-        df_targets = pd.read_csv(CSV_FILE, dtype=str)
+        try:
+            # 먼저 표준(utf-8) 방식으로 읽기 시도
+            df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='utf-8')
+        except UnicodeDecodeError:
+            # 실패하면 한국 엑셀(cp949) 방식으로 다시 읽기
+            df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='cp949')
+            
         df_targets.columns = df_targets.columns.str.strip().str.lower()
         
         if 'code' not in df_targets.columns:
@@ -43,10 +49,8 @@ def analyze_stocks():
 
     # 2. 개별 종목 분석 시작
     for index, row in df_targets.iterrows():
-        # 데이터 안전하게 가져오기 (공백 제거)
         code = str(row['code']).strip()
         
-        # name 열이 있고 값이 비어있지 않으면 가져옴
         if 'name' in df_targets.columns and pd.notna(row['name']):
             stock_name = str(row['name']).strip()
         else:
@@ -55,18 +59,16 @@ def analyze_stocks():
         ticker = code if '.' in code else f"{code}.KS"
         display_name = f"<b>{stock_name}</b>({code})" if stock_name != code else f"<b>{ticker}</b>"
 
-        print(f"[{index+1}/{len(df_targets)}] {display_name} 분석 중...") # 깃허브 로그용
+        print(f"[{index+1}/{len(df_targets)}] {display_name} 분석 중...") 
 
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(period="3y")
             
-            # 에러 방지 1: 데이터가 비어있거나 'Close(종가)' 데이터가 없는 경우 건너뛰기
             if df is None or df.empty or 'Close' not in df.columns or len(df) < 50:
                 report_lines.append(f"⚠️ {display_name}: 데이터 부족 (신규상장/거래정지)")
                 continue
 
-            # 에러 방지 2: 정상적인 데이터일 때만 계산 수행
             df['Daily_Return'] = df['Close'].pct_change() * 100
             df = df.dropna(subset=['Daily_Return'])
             
@@ -97,7 +99,6 @@ def analyze_stocks():
             report_lines.append(line)
             
         except Exception as e:
-            # 어떤 에러가 나도 프로그램이 뻗지 않고 다음 종목으로 넘어가도록 처리
             print(f"에러 발생 ({ticker}): {e}")
             report_lines.append(f"⚠️ {display_name}: 일시적 통신 오류")
 
