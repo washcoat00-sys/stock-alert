@@ -2,7 +2,7 @@ import pandas as pd
 import yfinance as yf
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta  # 👈 시간대 설정을 위해 추가됨
 
 # --- 설정 (GitHub Secrets 연동) ---
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -24,15 +24,13 @@ def send_telegram_msg(message):
         print(f"전송 실패: {e}")
 
 def analyze_stocks():
-    # 1. CSV 파일 안전하게 읽기 (🔥 인코딩 에러 해결 부분 🔥)
+    # 1. CSV 파일 안전하게 읽기
     try:
         try:
-            # 먼저 표준(utf-8) 방식으로 읽기 시도
             df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='utf-8')
         except UnicodeDecodeError:
-            # 실패하면 한국 엑셀(cp949) 방식으로 다시 읽기
             df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='cp949')
-            
+
         df_targets.columns = df_targets.columns.str.strip().str.lower()
         
         if 'code' not in df_targets.columns:
@@ -43,7 +41,10 @@ def analyze_stocks():
         print(f"에러: {CSV_FILE} 파일을 찾을 수 없습니다.")
         return
 
-    now_str = datetime.now().strftime('%m/%d %H:%M')
+    # ⏰ 한국 시간(KST) 적용 (UTC 기준 + 9시간) ⏰
+    kst = timezone(timedelta(hours=9))
+    now_str = datetime.now(kst).strftime('%m/%d %H:%M')
+    
     report_lines = [f"📊 <b>주식 상태 리포트 ({now_str})</b>"]
     report_lines.append(f"<i>기준: 일일 변동률 {SIGMA_MULT}시그마</i>\n")
 
@@ -59,7 +60,7 @@ def analyze_stocks():
         ticker = code if '.' in code else f"{code}.KS"
         display_name = f"<b>{stock_name}</b>({code})" if stock_name != code else f"<b>{ticker}</b>"
 
-        print(f"[{index+1}/{len(df_targets)}] {display_name} 분석 중...") 
+        print(f"[{index+1}/{len(df_targets)}] {display_name} 분석 중...")
 
         try:
             stock = yf.Ticker(ticker)
