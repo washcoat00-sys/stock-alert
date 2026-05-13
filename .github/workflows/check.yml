@@ -1,0 +1,26 @@
+name: Stock Check
+
+on:
+  schedule:
+    - cron: '30 0 * * 1-5' # 한국 시간 09:30 (월~금)
+    - cron: '00 2 * * 1-5' # 한국 시간 11:00 (월~금)
+    - cron: '00 5 * * 1-5' # 한국 시간 14:00 (월~금)
+  workflow_dispatch: # 직접 실행 버튼 활성화
+
+jobs:
+  run-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+      - name: Run script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        # 파일명이 stock-alert.py이므로 아래와 같이 입력합니다.
+        run: python stock-alert.py
