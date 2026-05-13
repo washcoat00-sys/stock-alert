@@ -2,18 +2,18 @@ name: Stock Check
 
 on:
   schedule:
-    - cron: '30 0 * * 1-5' # 한국 시간 09:30 (월~금)
-    - cron: '00 2 * * 1-5' # 한국 시간 11:00 (월~금)
-    - cron: '00 5 * * 1-5' # 한국 시간 14:00 (월~금)
-  workflow_dispatch: # 직접 실행 버튼 활성화
+    - cron: '30 0 * * 1-5'
+    - cron: '00 2 * * 1-5'
+    - cron: '00 5 * * 1-5'
+  workflow_dispatch:
 
 jobs:
   run-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # v3에서 v4로 최신화
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v4에서 v5로 최신화
         with:
           python-version: '3.9'
       - name: Install dependencies
@@ -22,5 +22,4 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        # 파일명이 stock-alert.py이므로 아래와 같이 입력합니다.
         run: python stock-alert.py
