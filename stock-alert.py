@@ -2,7 +2,7 @@ import pandas as pd
 import yfinance as yf
 import requests
 import os
-from datetime import datetime, timezone, timedelta  # 👈 시간대 설정을 위해 추가됨
+from datetime import datetime, timezone, timedelta
 
 # --- 설정 (GitHub Secrets 연동) ---
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -24,11 +24,13 @@ def send_telegram_msg(message):
         print(f"전송 실패: {e}")
 
 def analyze_stocks():
-    # 1. CSV 파일 안전하게 읽기
+    # 1. CSV 파일 안전하게 읽기 (한글 인코딩 에러 방지)
     try:
         try:
+            # 기본 utf-8로 읽기 시도
             df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='utf-8')
         except UnicodeDecodeError:
+            # 실패 시 윈도우 한글 방식(cp949)으로 읽기
             df_targets = pd.read_csv(CSV_FILE, dtype=str, encoding='cp949')
 
         df_targets.columns = df_targets.columns.str.strip().str.lower()
@@ -41,7 +43,7 @@ def analyze_stocks():
         print(f"에러: {CSV_FILE} 파일을 찾을 수 없습니다.")
         return
 
-    # ⏰ 한국 시간(KST) 적용 (UTC 기준 + 9시간) ⏰
+    # ⏰ 한국 시간(KST) 적용
     kst = timezone(timedelta(hours=9))
     now_str = datetime.now(kst).strftime('%m/%d %H:%M')
     
